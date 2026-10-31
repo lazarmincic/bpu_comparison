@@ -102,12 +102,13 @@ begin
    -- bp komb signali (id faza)
    bp_address_match_s <= '1' when branch_adder_id_i = pred_address_id_s else '0';
    bp_taken_match_s <= '1' when branch_condition_i = pred_taken_id_s else '0';
+   bp_type_match_s <= '1' when branch_type_pred_id_s = branch_type_id_s else '0';
    
    id_ex_flush_s <= '0'; -- ipak ne treba, višak
    
    pc_next_if_s : process(branch_id_s, bcc_id_s, pred_taken_s, bp_address_match_s, bp_taken_match_s
         ,uncond_jump_id_s, branch_type_if_s, branch_condition_i, jalr_id_s , jal_id_s, btb_hit_id_s
-        ,pred_taken_id_s
+        ,pred_taken_id_s, bp_type_match_s
         )
         
    begin
@@ -130,7 +131,7 @@ begin
       
       -- id faza
       if (branch_id_s = '1') then -- instrukcija uslovnog skoka
-         if (bp_taken_match_s = '1' and bp_address_match_s = '1') then 
+         if (bp_taken_match_s = '1' and bp_address_match_s = '1' and bp_type_match_s = '1') then 
             -- skok je tačno predviđen - adresa i ishod grane su tacno predvidjeni
             -- azuriraj bht unutar bpu, btb se ne azurira
             btb_bht_we_s(0) <= '1';
@@ -149,13 +150,15 @@ begin
                 pc_next_sel_o <= "11";
             end if;
             -- azuriraj btb ukoliko se adrese ne poklapaju (ili podatak nije validan)
-            if (bp_address_match_s = '0') then
+            -- ili ukoliko se metapodaci razlikuju
+            if (bp_address_match_s = '0' or bp_type_match_s = '0') then
                 btb_bht_we_s(1) <= '1';
             end if;
             -- azuriraj bht ukoliko se ishodi skoka ne poklapaju
             if (bp_taken_match_s = '0') then
                 btb_bht_we_s(0) <= '1';
             end if;
+            
          end if;
       elsif uncond_jump_id_s = '1' then  -- bezuslovni skok
          
@@ -163,8 +166,8 @@ begin
              branch_taken_id_s <= bp_address_match_s and btb_hit_id_s; -- ulaz u bht od bpu
              -- skok se ne predvidja, vec adresa, za sta se koristi postojuci hardver
              -- adresa tačno predviđena
-             btb_bht_we_s(1) <= '1'; -- zbog metapodataka bitova
-             if bp_address_match_s = '1' and pred_taken_id_s = '1' then
+             
+             if bp_address_match_s = '1' and pred_taken_id_s = '1' and bp_type_match_s = '1' then
                 -- taken u ovom kontekstu pretstavlja histerezis
                 -- ništa u btb, adresa je dobra i ne menja se
                 -- upis u ind bht
@@ -172,9 +175,10 @@ begin
              else
                 -- adresa netačno predviđena
                 -- upisuj i u btb i bht
-                if (pred_taken_id_s = '0') then
-                    ind_bht_we_s <= '1';
-                end if;
+                -- metapodatak ili adresa se ne poklapa
+                ind_bht_we_s <= '1';
+                btb_bht_we_s(1) <= '1'; 
+                
                 -- flushuj if id 
                 if_id_flush_s <= '1';
                 pc_next_sel_o <= "10";
@@ -182,7 +186,7 @@ begin
          elsif jal_id_s = '1' then
             -- za jal histerezis nije od koristi jer je direktni tip skoka
             -- u sladu sa tim bht se ne koristi
-            if bp_address_match_s = '1' and btb_hit_id_s = '1' then
+            if bp_address_match_s = '1' and btb_hit_id_s = '1' and bp_type_match_s = '1' then
             else
                 btb_bht_we_s(1) <= '1';
                 if_id_flush_s <= '1';
@@ -204,10 +208,12 @@ begin
                pred_taken_id_s <= '0';
                pred_address_id_s <= (others => '0');
                btb_hit_id_s <= '0';
+               branch_type_pred_id_s <= (others => '0');
             else
                pred_taken_id_s <= pred_taken_s;
                pred_address_id_s <= pred_address_s;
                btb_hit_id_s <= btb_hit_s;
+               branch_type_pred_id_s <= branch_type_if_s;
             end if; 
         end if;
       end if;

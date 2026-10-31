@@ -94,6 +94,8 @@ package controlpath_signals_pkg is
    signal btb_hit_id_s: std_logic := '0';
    signal is_ind_s : std_logic := '0';
    signal ind_bht_we_s: std_logic := '0';
+   signal branch_type_pred_id_s: std_logic_vector (1 downto 0) := (others=>'0');
+   signal bp_type_match_s: std_logic := '0';
    
 
 end package controlpath_signals_pkg;
